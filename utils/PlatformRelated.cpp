@@ -48,12 +48,18 @@ void XUtils::triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMod
     bool isTerminal = false;
 
     if (status) {
-        // Check common terminal class names
-        if (strcmp(hint.res_class, "XTerm") == 0 ||
-            strcmp(hint.res_class, "konsole") == 0 ||
-            strcmp(hint.res_class, "gnome-terminal") == 0 ||
-            strcmp(hint.res_class, "terminator") == 0) {
-            isTerminal = true;
+        // WM_CLASS names are matched case-insensitively against both the
+        // instance and class name (e.g. "gnome-terminal-server" / "Gnome-terminal").
+        static const QStringList terminalClasses = {
+            "xterm", "uxterm", "konsole", "gnome-terminal", "gnome-terminal-server",
+            "terminator", "xfce4-terminal", "mate-terminal", "lxterminal", "tilix",
+            "kitty", "alacritty", "urxvt", "rxvt", "st", "terminology", "wezterm",
+            "qterminal", "yakuake", "guake", "foot",
+        };
+        for (const char *name : {hint.res_class, hint.res_name}) {
+            if (name && terminalClasses.contains(QString::fromLatin1(name), Qt::CaseInsensitive)) {
+                isTerminal = true;
+            }
         }
         XFree(hint.res_name);
         XFree(hint.res_class);
@@ -65,14 +71,19 @@ void XUtils::triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMod
         || (mode == MPasteSettings::AutoPasteShortcut && !isTerminal);
 
     xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 0);
+
+    // Send the shortcut with XTEST (CURRENTWINDOW) so it arrives as a real key
+    // event for the focused window. Passing winId makes xdo use XSendEvent,
+    // whose synthetic core key events GTK3 and other XInput2 clients ignore.
+    // The caller has already activated the target window.
     if (useTerminalPaste) {
-        xdo_send_keysequence_window(m_xdo, winId, "Control+Shift+v", 100);
+        xdo_send_keysequence_window(m_xdo, CURRENTWINDOW, "Control+Shift+v", 100);
     } else if (useCtrlV) {
-        xdo_send_keysequence_window(m_xdo, winId, "Control+v", 100);
+        xdo_send_keysequence_window(m_xdo, CURRENTWINDOW, "Control+v", 100);
     } else if (mode == MPasteSettings::ShiftInsertShortcut) {
-        xdo_send_keysequence_window(m_xdo, winId, "Shift+Insert", 100);
+        xdo_send_keysequence_window(m_xdo, CURRENTWINDOW, "Shift+Insert", 100);
     } else {
-        xdo_send_keysequence_window(m_xdo, winId, "Alt+Insert", 100);
+        xdo_send_keysequence_window(m_xdo, CURRENTWINDOW, "Alt+Insert", 100);
     }
 }
 
