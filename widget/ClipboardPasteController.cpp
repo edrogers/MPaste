@@ -223,9 +223,9 @@ void ClipboardPasteController::pasteToTarget(WId targetWindow) {
     isPasting_ = true;
     emit pastingStarted();
 
-    auto finishPaste = [this]() {
+    auto finishPaste = [this, targetWindow]() {
         qInfo() << "[paste-controller] finishPaste -> triggerPasteShortcut";
-        PlatformRelated::triggerPasteShortcut(MPasteSettings::getInst()->getPasteShortcutMode());
+        PlatformRelated::triggerPasteShortcut(MPasteSettings::getInst()->getPasteShortcutMode(), targetWindow);
         QTimer::singleShot(200, this, [this]() {
             isPasting_ = false;
             emit pastingFinished();

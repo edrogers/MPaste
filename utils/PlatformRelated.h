@@ -21,7 +21,8 @@ public:
     static void activateWindow(WId wId);
     static QPixmap getWindowIcon(WId wId);
     static WId currActiveWindow();
-    static void triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode = MPasteSettings::AutoPasteShortcut);
+    // targetWindow is the window to send the paste shortcut to (X11 only; 0 = the currently focused window).
+    static void triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode = MPasteSettings::AutoPasteShortcut, WId targetWindow = 0);
     static void startWindowTracking();
     static WId previousActiveWindow();
     static bool revealInFileManager(const QList<QUrl> &urls);

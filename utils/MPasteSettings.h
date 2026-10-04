@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QString>
 #include <QNetworkProxy>
+#include <qwindowdefs.h>
 
 class MPasteSettings : public QObject {
     Q_OBJECT
@@ -83,9 +84,9 @@ public:
 
     bool isTerminalTitle(const QString &title);
 
-    int getCurrFocusWinId() const;
+    WId getCurrFocusWinId() const;
 
-    void setCurrFocusWinId(int currFocusWinId);
+    void setCurrFocusWinId(WId currFocusWinId);
 
     void saveSettings();
 
@@ -119,7 +120,7 @@ private:
     QString baiduOcrSecretKey;
     bool autoOcr = false;
 
-    int currFocusWinId;
+    WId currFocusWinId = 0;
 
     static MPasteSettings *inst;
 };

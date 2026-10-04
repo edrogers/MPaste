@@ -15,6 +15,9 @@
 #include <QDateTime>
 #include <QMutex>
 #include <QTextStream>
+#ifdef Q_OS_LINUX
+#include <xcb/xcb.h>
+#endif
 
 #include "utils/MPasteSettings.h"
 #include "widget/MPasteWidget.h"
@@ -35,6 +38,27 @@ QScreen* getScreenForWindow(WId windowId) {
 #endif
     }
     return QGuiApplication::primaryScreen();
+}
+
+// Qt 6.5+ reports an empty (0x0) screen when the X server exposes no RandR
+// monitors, as on some VNC/headless setups. A width of 0 collapses the panel to
+// one pixel and it is never mapped, so fall back to the X root window size.
+QRect screenGeometryOrRoot(const QScreen *screen) {
+    const QRect geometry = screen ? screen->geometry() : QRect();
+    if (!geometry.isEmpty()) {
+        return geometry;
+    }
+#ifdef Q_OS_LINUX
+    if (auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>()) {
+        if (xcb_connection_t *connection = x11->connection()) {
+            const xcb_screen_t *root = xcb_setup_roots_iterator(xcb_get_setup(connection)).data;
+            if (root) {
+                return QRect(0, 0, root->width_in_pixels, root->height_in_pixels);
+            }
+        }
+    }
+#endif
+    return geometry;
 }
 
 QString chooseInstalledUiFontFamily(const QStringList &preferredFamilies, const QString &fallbackFamily) {
@@ -220,7 +244,7 @@ int main(int argc, char* argv[]) {
 
         MPasteWidget widget;
         widget.setWindowTitle("MPaste");
-        widget.setFixedWidth(QApplication::primaryScreen()->geometry().width());
+        widget.setFixedWidth(screenGeometryOrRoot(QApplication::primaryScreen()).width());
 
         PlatformRelated::startWindowTracking();
 
@@ -249,7 +273,11 @@ int main(int argc, char* argv[]) {
             if (!focusWinId) {
                 focusWinId = PlatformRelated::currActiveWindow();
             }
-            MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
+            // Showing the panel again while it is already focused must not
+            // replace the paste target with the panel itself.
+            if (focusWinId != widget.winId()) {
+                MPasteSettings::getInst()->setCurrFocusWinId(focusWinId);
+            }
 
             QScreen* currentScreen = getScreenForWindow(focusWinId);
             if (!currentScreen) {
@@ -259,22 +287,24 @@ int main(int argc, char* argv[]) {
                 currentScreen = QGuiApplication::primaryScreen();
             }
 
-            widget.setFixedWidth(currentScreen->availableSize().width());
+            const QRect screenRect = screenGeometryOrRoot(currentScreen);
+            const int availableWidth = currentScreen->availableSize().width();
+            widget.setFixedWidth(availableWidth > 0 ? availableWidth : screenRect.width());
 
             isShowingWidget = true;
 
             qInfo().noquote() << QStringLiteral("[wake] showWidget prep done: %1 ms").arg(wakeTimer.elapsed());
 
             const int showDelayMs = immediateForAltHotkey ? 0 : 50;
-            QTimer::singleShot(showDelayMs, [&widget, currentScreen, wakeTimer]() {
+            QTimer::singleShot(showDelayMs, [&widget, screenRect, wakeTimer]() {
                 qInfo().noquote() << QStringLiteral("[wake] timer fired: %1 ms").arg(wakeTimer.elapsed());
                 widget.setVisibleWithAnnimation(true);
                 qInfo().noquote() << QStringLiteral("[wake] setVisibleWithAnnimation done: %1 ms").arg(wakeTimer.elapsed());
                 widget.raise();
                 widget.activateWindow();
-                widget.move(currentScreen->geometry().x(),
-                          currentScreen->geometry().y() +
-                          currentScreen->geometry().height() -
+                widget.move(screenRect.x(),
+                          screenRect.y() +
+                          screenRect.height() -
                           widget.height());
 
                 PlatformRelated::activateWindow(widget.winId());

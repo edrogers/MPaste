@@ -474,6 +474,13 @@ ScrollItemsWidget *MPasteWidget::currItemsWidget() {
 
 void MPasteWidget::hideAndPaste() {
     WId previousWId = PlatformRelated::previousActiveWindow();
+#ifndef Q_OS_WIN
+    // On Linux previousActiveWindow() just returns the focused window, which by
+    // now is this panel. Use the window that was focused when the panel was shown.
+    if (const WId savedWId = MPasteSettings::getInst()->getCurrFocusWinId()) {
+        previousWId = savedWId;
+    }
+#endif
     qInfo().noquote() << QStringLiteral("[hide-and-paste] enter previousWId=%1 isVisible=%2")
         .arg(reinterpret_cast<quintptr>(previousWId))
         .arg(isVisible());

@@ -10,6 +10,8 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #elif defined(Q_OS_LINUX)
+#include <QGuiApplication>
+#include <array>
 #include <xcb/xcb.h>
 #include <xcb/xcb_keysyms.h>
 #endif
@@ -23,10 +25,20 @@ public:
 #ifdef Q_OS_WIN
         hotkeyId = 0;
 #elif defined(Q_OS_LINUX)
-        // Initialize XCB connection
-        connection = xcb_connect(nullptr, nullptr);
-        if (xcb_connection_has_error(connection)) {
-            qWarning("Failed to connect to X server");
+        // Share Qt's own X connection. Grabbed key events are delivered to the
+        // connection that issued the grab, and the native event filter below
+        // only sees events from Qt's connection, so a private xcb_connect()
+        // would grab the key but never report a key press.
+        connection = nullptr;
+        keySymbols = nullptr;
+        keycode = 0;
+        modifiers = 0;
+        if (auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>()) {
+            connection = x11->connection();
+        }
+        if (!connection || xcb_connection_has_error(connection)) {
+            qWarning("Failed to get Qt's X server connection");
+            connection = nullptr;
             return;
         }
 
@@ -48,9 +60,7 @@ public:
         if (keySymbols) {
             xcb_key_symbols_free(keySymbols);
         }
-        if (connection) {
-            xcb_disconnect(connection);
-        }
+        // connection belongs to Qt; do not disconnect it.
 #endif
         qApp->removeNativeEventFilter(eventFilter);
         delete eventFilter;
@@ -104,10 +114,13 @@ public:
         keycode = keycodes[0];
         free(keycodes);
 
-        // Register global hotkey
-        xcb_grab_key(connection, 1, root,
-                     modifiers, keycode,
-                     XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
+        // Register global hotkey. A grab only matches the exact modifier
+        // state, so also grab with CapsLock/NumLock set.
+        for (uint32_t lock : lockCombinations()) {
+            xcb_grab_key(connection, 1, root,
+                         modifiers | lock, keycode,
+                         XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
+        }
 
         xcb_flush(connection);
         return true;
@@ -124,13 +137,27 @@ public:
         }
 #elif defined(Q_OS_LINUX)
         if (connection && keycode != 0) {
-            xcb_ungrab_key(connection, keycode, root, modifiers);
+            for (uint32_t lock : lockCombinations()) {
+                xcb_ungrab_key(connection, keycode, root, modifiers | lock);
+            }
             xcb_flush(connection);
             keycode = 0;
             modifiers = 0;
         }
 #endif
     }
+
+#ifdef Q_OS_LINUX
+    // CapsLock and NumLock (Mod2) change the modifier state of a key press
+    // but should not stop the hotkey from matching.
+    static constexpr uint32_t lockMask() {
+        return XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2;
+    }
+
+    static std::array<uint32_t, 4> lockCombinations() {
+        return {0, XCB_MOD_MASK_LOCK, XCB_MOD_MASK_2, XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2};
+    }
+#endif
 
 private:
     class EventFilter : public QAbstractNativeEventFilter {
@@ -152,7 +179,7 @@ private:
                 if ((event->response_type & ~0x80) == XCB_KEY_PRESS) {
                     xcb_key_press_event_t *kp = (xcb_key_press_event_t *)event;
                     if (kp->detail == d->keycode &&
-                        (kp->state & d->modifiers) == d->modifiers) {
+                        (kp->state & ~lockMask()) == d->modifiers) {
                         emit d->q->hotkeyPressed();
                         return true;
                     }

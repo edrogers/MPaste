@@ -40,6 +40,7 @@ void XUtils::activeWindowX11(Window winId) {
 
 void XUtils::triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMode mode) {
     openXdo();
+    openDisplay();
 
     // Get window class to identify terminals
     XClassHint hint;
@@ -166,8 +167,8 @@ WId PlatformRelated::currActiveWindow() {
     return (WId)XUtils::currentWinId();
 }
 
-void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
-    XUtils::triggerPasteShortcut(XUtils::currentWinId(), mode);
+void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode, WId targetWindow) {
+    XUtils::triggerPasteShortcut(targetWindow ? static_cast<Window>(targetWindow) : XUtils::currentWinId(), mode);
 }
 
 void PlatformRelated::startWindowTracking() {
@@ -633,7 +634,7 @@ WId PlatformRelated::currActiveWindow() {
     return (WId)WinUtils::currentWinId();  // 使用 WId 类型转换
 }
 
-void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode) {
+void PlatformRelated::triggerPasteShortcut(MPasteSettings::PasteShortcutMode mode, WId /*targetWindow*/) {
     HWND target = WinUtils::getPreviousWindow();
     if (!target) {
         target = WinUtils::currentWinId();

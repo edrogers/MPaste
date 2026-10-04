@@ -275,10 +275,10 @@ bool MPasteSettings::isTerminalTitle(const QString &title) {
     return this->terminalNames.contains(title);
 }
 
-int MPasteSettings::getCurrFocusWinId() const {
+WId MPasteSettings::getCurrFocusWinId() const {
     return currFocusWinId;
 }
 
-void MPasteSettings::setCurrFocusWinId(int currFocusWinId) {
+void MPasteSettings::setCurrFocusWinId(WId currFocusWinId) {
     MPasteSettings::currFocusWinId = currFocusWinId;
 }
