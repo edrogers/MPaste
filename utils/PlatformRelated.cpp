@@ -70,7 +70,18 @@ void XUtils::triggerPasteShortcut(Window winId, MPasteSettings::PasteShortcutMod
     const bool useCtrlV = (mode == MPasteSettings::CtrlVShortcut)
         || (mode == MPasteSettings::AutoPasteShortcut && !isTerminal);
 
-    xdo_send_keysequence_window_up(m_xdo, winId, "Alt", 0);
+    // The user may still be holding Shift/Ctrl/Alt from the key that selected
+    // the item (Shift+Enter, Alt+digit, ...). Those would be combined with the
+    // shortcut below, e.g. Ctrl+Shift+V, which many apps ignore. Release any
+    // that are down first (XTEST, so the server's modifier state really clears).
+    char keymap[32];
+    XQueryKeymap(m_display, keymap);
+    for (const char *name : {"Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R"}) {
+        const KeyCode code = XKeysymToKeycode(m_display, XStringToKeysym(name));
+        if (code != 0 && (keymap[code / 8] & (1 << (code % 8)))) {
+            xdo_send_keysequence_window_up(m_xdo, CURRENTWINDOW, name, 0);
+        }
+    }
 
     // Send the shortcut with XTEST (CURRENTWINDOW) so it arrives as a real key
     // event for the focused window. Passing winId makes xdo use XSendEvent,
